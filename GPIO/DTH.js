@@ -30,12 +30,19 @@ function DHT(callback, opt) {
         return -1;
     }
   };
-
+  var tempC = 0;
+  var humC = 0;
   function readTemp() {
-    callback("DHT", 0, self.read(0));
+    if (tempC != self.read(0)) {
+      callback("DHT", 0, self.read(0));
+      tempC = self.read(0);
+    }
   }
   function readHumi() {
-    callback("DHT", 1, self.read(1));
+    if (humC != self.read(1)) {
+      callback("DHT", 1, self.read(1));
+      humC = self.read(1);
+    }
   }
   var tempInterval = setInterval(readTemp, opt.temp * 2000);
   var humiInterval = setInterval(readHumi, opt.humi * 2000);
