@@ -7,6 +7,7 @@
     * GND(Brown) - Ground(-)
 */
 function Motor(five, callback, opt) {
+  console.log('calling motor');
   var servo = new five.Servo({ pin: "P1-12", startAt: 0, type: "continuous" });
   var status = 0; // 0: close, 1: open, -1: opening, -2: closing, -3: delay time
   var speed = 0.99; // 0-1
@@ -15,11 +16,11 @@ function Motor(five, callback, opt) {
     if (status < 0) return;
     if (status) {
       // 1: opened
-      servo.cw(speed); // 0-1
+      servo.ccw(speed); // 0-1
       status = -2; // closing
     } else {
       // closed
-      servo.ccw(speed);
+      servo.cw(speed);
       status = -1; // opening
     }
     callback("DOOR", 0, status);
@@ -33,7 +34,7 @@ function Motor(five, callback, opt) {
     );
   };
   this.open = function (sec) {
-    servo.ccw(speed); // 0-1
+    servo.cw(speed); // 0-1
     status = -1;
     callback("DOOR", 0, status); // opening
     setTimeout(
@@ -51,7 +52,7 @@ function Motor(five, callback, opt) {
     }
   };
   this.close = function () {
-    servo.cw(speed); // 0-1
+    servo.ccw(speed); // 0-1
     status = -2;
     callback("DOOR", 0, status);
     setTimeout(
