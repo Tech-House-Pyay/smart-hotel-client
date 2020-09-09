@@ -12,12 +12,11 @@ var Motor = require("./GPIO/Motor");
 var Relay = require("./GPIO/Relay");
 var Omx = require("node-omxplayer");
 
-var serverUrl = "http://192.168.100.229";
+var serverUrl = "http://192.168.100.4";
 var socketIo = io(serverUrl);
 
 var SerialPort = require("serialport");
 const Readline = require("@serialport/parser-readline");
-const { constants } = require("buffer");
 var port = new SerialPort("/dev/ttyUSB0");
 
 const parser = port.pipe(new Readline({ delimiter: "\r\n" }));
@@ -45,7 +44,8 @@ board.on("ready", function () {
   self.motion = new Motion(five, fnCallback);
   self.lamps = new Lamps(five);
   self.relay = new Relay();
-  self.motor = new Motor(five, fnCallback, { time: 3.3 });
+  // self.windows = new Windows(fnCallback);
+  self.motor = new Motor(five, fnCallback, { time: 3.9 });
   self.adc = new ADC(five, fnCallback, {
     gas: 1,
     flame: 1,
@@ -226,8 +226,6 @@ serverIo.on("connection", function (socket) {
     socket.emit("rfid", data);
   });
 });
-var mo = false;
-var mo1 = true;
 function fnCallback(type, index, value) {
   switch (type) {
     case "MOTION":
@@ -241,17 +239,6 @@ function fnCallback(type, index, value) {
     case "ADC":
       if (index == 2 && readyW) {
         self.setWater(value);
-        
-        if(value < 10 &&  !mo){
-          console.log('should open');
-          self.relay.on("0");
-          mo = true;
-        }else if(value > 30 && mo1){
-          mo1=false
-          console.log("should close")
-          self.relay.off("0");
-        }
-        console.log('water ',value,mo)
       }
       if (index == 0 && readyW) self.setGas(value);
       if (index == 1 && readyW) self.setFlame(1020 - value);
@@ -272,6 +259,7 @@ function fnCallback(type, index, value) {
       console.log("ALARM", index, value);
       break;
     case "WINDOW":
+      console.log("WINDOW", index, value);
       if (index == 0 && readyW) self.setWindow0(value);
       if (index == 1 && readyW) self.setWindow1(value);
       break;
