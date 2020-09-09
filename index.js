@@ -10,9 +10,10 @@ var Windows = require("./GPIO/Windows");
 var Lamps = require("./GPIO/Lamps");
 var Motor = require("./GPIO/Motor");
 var Relay = require("./GPIO/Relay");
+var Buttons = require("./GPIO/Buttons");
 var Omx = require("node-omxplayer");
 
-var serverUrl = "http://192.168.100.4";
+var serverUrl = "http://192.168.100.49";
 var socketIo = io(serverUrl);
 
 var SerialPort = require("serialport");
@@ -36,6 +37,10 @@ var gasValue = 710;
 var flameValue = 700;
 var readyW = false;
 var doorDelay = 7;
+var motionStatus = true;
+var securityStatus = false;
+var w0Status = true;
+var w1Status = true;
 // this.windows = new Windows(fnCallback);
 // this.dht = new DHT(fnCallback, { temp: 5, humi: 5 });
 board.on("ready", function () {
@@ -44,6 +49,7 @@ board.on("ready", function () {
   self.motion = new Motion(five, fnCallback);
   self.lamps = new Lamps(five);
   self.relay = new Relay();
+  self.buttons = new Buttons(five, btnClick);
   // self.windows = new Windows(fnCallback);
   self.motor = new Motor(five, fnCallback, { time: 3.9 });
   self.adc = new ADC(five, fnCallback, {
@@ -89,8 +95,8 @@ this.read = function () {
 
 serverIo.on("connection", function (socket) {
   console.log("connected....");
-  // allLampsOff();
-  // allRelayOff();
+  allLampsOff();
+  allRelayOff();
   //LED
   socket.on("balight", (data) => {
     if (data) {
@@ -102,9 +108,9 @@ serverIo.on("connection", function (socket) {
   });
   socket.on("dolight", (data) => {
     if (data) {
-      self.lamps.on(4);
+      self.lamps.on(1);
     } else {
-      self.lamps.off(4);
+      self.lamps.off(1);
     }
     socket.emit("dlight", data);
   });
@@ -167,18 +173,33 @@ serverIo.on("connection", function (socket) {
   });
   socket.on("security", (data) => {
     console.log("security is " + data);
+    securityStatus = data;
+    console.log(data, w0Status, w1Status);
+    if (data && !w0Status) {
+      console.log("this is work 0");
+      self.setAlarm("2", data);
+    }
+    if (data && !w1Status) {
+      console.log("this is work 1");
+      self.setAlarm("3", data);
+    }
+    if (data) {
+      socket.emit("motion", data);
+      motionStatus = true;
+    }
     socket.emit("security", data);
   });
-  socket.on("door", (data) => {
-    console.log("door is " + data);
-    if (data) {
-      console.log("open door");
-      self.motor.toggle();
-    } else {
-      console.log("close door");
-      self.motor.toggle();
-    }
-    socket.emit("door", data);
+  socket.on("motion", (data) => {
+    console.log("motion is " + data);
+    // if (data) {          //this is for door
+    //   console.log("open door");
+    //   self.motor.toggle();
+    // } else {
+    //   console.log("close door");
+    //   self.motor.toggle();
+    // }
+    motionStatus = data;
+    socket.emit("motion", data);
   });
   socket.on("doorR", (data) => {
     console.log("open door by rfid");
@@ -217,10 +238,26 @@ serverIo.on("connection", function (socket) {
   self.setAlarm = (idx, value) => {
     socket.emit("alarm", { index: idx, value: value });
   };
+
+  self.setButton = (index, value) => {
+    if (index == 0) {
+      socket.emit("blight", value);
+    } else if (index == 1) {
+      socket.emit("dlight", value);
+    } else if (index == 2) {
+      socket.emit("s1light", value);
+    } else if (index == 3) {
+      socket.emit("s2light", value);
+    } else if (index == 5) {
+      socket.emit("button", { index: index, value: value });
+    } else {
+      console.log("LAMPS", index, value);
+    }
+  };
   readyW = true;
   self.dht = new DHT(fnCallback, { temp: 3, humi: 3 });
   self.windows = new Windows(fnCallback);
-
+  self.lamps.on(4);
   parser.on("data", (data) => {
     console.log(data);
     socket.emit("rfid", data);
@@ -229,7 +266,12 @@ serverIo.on("connection", function (socket) {
 function fnCallback(type, index, value) {
   switch (type) {
     case "MOTION":
-      self.motor.open(doorDelay);
+      if (motionStatus && !securityStatus) {
+        self.motor.open(doorDelay);
+      }
+      if (motionStatus && securityStatus) {
+        self.setAlarm("4", value);
+      }
       console.log("Motion value ", value);
       break;
     case "DHT":
@@ -241,28 +283,80 @@ function fnCallback(type, index, value) {
         self.setWater(value);
       }
       if (index == 0 && readyW) self.setGas(value);
-      if (index == 1 && readyW) self.setFlame(1020 - value);
+      if (index == 1 && readyW) {
+        self.setFlame(1020 - value);
+        console.log(value);
+      }
+      break;
+    case "BUTTONS":
+      if (readyW) {
+        self.setButton(index, value);
+      }
       break;
     case "ALARM":
-      // if (index == "0") {
-      //   var player = Omx("./mp3/gas.wav");
-      //   setTimeout(function () {
-      //     player.quit();
-      //   }, 5000);
-      // } else if (index == "1") {
-      //   var player = Omx("./mp3/flame.wav");
-      //   setTimeout(function () {
-      //     player.quit();
-      //   }, 5000);
-      // }
-      // self.setAlarm(index, value);
-      console.log("ALARM", index, value);
+      if (readyW) {
+        self.setAlarm(index, value);
+        console.log("ALARM", index, value);
+      }
       break;
     case "WINDOW":
       console.log("WINDOW", index, value);
-      if (index == 0 && readyW) self.setWindow0(value);
-      if (index == 1 && readyW) self.setWindow1(value);
+      if (index == 0 && readyW) {
+        w0Status = value;
+        if (securityStatus) {
+          self.setAlarm("2", value);
+        }
+        self.setWindow0(value);
+      }
+      if (index == 1 && readyW) {
+        w1Status = value;
+        if (securityStatus) {
+          self.setAlarm("3", value);
+        }
+        self.setWindow1(value);
+      }
       break;
+    case "LAMPS":
+      self.setButton(index, value);
+      break;
+    case "DOOR":
+      if (value < 0) {
+        self.lamps.on(5);
+        self.lamps.off(4);
+        self.lamps.off(6);
+      } else if (value == 0) {
+        self.lamps.off(5);
+        self.lamps.on(4);
+        self.lamps.off(6);
+      } else {
+        self.lamps.off(5);
+        self.lamps.off(4);
+        self.lamps.on(6);
+      }
+      console.log("door", index, value);
+      break;
+  }
+}
+var fanS = false;
+function btnClick(btnNo) {
+  if (btnNo == 4) {
+    self.motor.open(doorDelay);
+    // sockets.emit('alarm',{alarm:true,type:"bell"});
+    console.log("call open door btn");
+  } else if (btnNo == 5) {
+    if (fanS) {
+      self.relay.off("1");
+      fanS = false;
+      fnCallback("BUTTONS", btnNo, false);
+    } else {
+      self.relay.on("1");
+      fnCallback("BUTTONS", btnNo, true);
+      fanS = true;
+    }
+  } else {
+    self.lamps.toggle(btnNo);
+    // alarm (all lamp blink)
+    fnCallback("LAMPS", btnNo, self.lamps.read(btnNo));
   }
 }
 
